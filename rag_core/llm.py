@@ -69,12 +69,21 @@ class ClaudeAnswerGenerator:
                 }
             ],
         )
-        if self.model in _FALLBACK_MODELS:
-            response = client.beta.messages.create(
-                betas=["server-side-fallback-2026-07-01"], fallbacks="default", **request
-            )
-        else:
-            response = client.messages.create(**request)
+        try:
+            if self.model in _FALLBACK_MODELS:
+                response = client.beta.messages.create(
+                    betas=["server-side-fallback-2026-07-01"], fallbacks="default", **request
+                )
+            else:
+                response = client.messages.create(**request)
+        except TypeError as exc:
+            # The SDK resolves credentials (env vars, login profiles) at
+            # request time; with none available it raises TypeError here.
+            if "authentication" in str(exc).lower():
+                raise LLMNotConfiguredError(
+                    "No Anthropic API key configured — set ANTHROPIC_API_KEY."
+                ) from exc
+            raise
 
         if response.stop_reason == "refusal":
             return Answer(

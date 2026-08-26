@@ -70,3 +70,17 @@ def test_refusal_returns_graceful_answer():
     answer = ClaudeAnswerGenerator(model="claude-haiku-4-5", client=client).answer("Q?", CHUNKS)
     assert answer.citations == []
     assert "declined" in answer.text
+
+
+def test_missing_credentials_raise_llm_not_configured():
+    import pytest
+
+    from rag_core.llm import LLMNotConfiguredError
+
+    class NoAuthClient(StubClient):
+        def _plain_create(self, **kwargs):
+            raise TypeError("Could not resolve authentication method.")
+
+    generator = ClaudeAnswerGenerator(model="claude-haiku-4-5", client=NoAuthClient(None))
+    with pytest.raises(LLMNotConfiguredError):
+        generator.answer("Q?", CHUNKS)

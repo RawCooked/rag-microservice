@@ -20,12 +20,14 @@ def fake_pipeline(tmp_path, monkeypatch):
 
 
 client = TestClient(app)
+AUTH = {"X-API-Key": "dev-key"}
 
 
 def test_upload_indexes_document(fake_pipeline):
     response = client.post(
         "/documents",
         files={"file": ("report.md", b"# Title\n\nSome content", "text/markdown")},
+        headers=AUTH,
     )
     assert response.status_code == 201
     body = response.json()
@@ -38,18 +40,19 @@ def test_unsupported_extension_is_rejected(fake_pipeline):
     response = client.post(
         "/documents",
         files={"file": ("virus.exe", b"nope", "application/octet-stream")},
+        headers=AUTH,
     )
     assert response.status_code == 400
     assert fake_pipeline.ingested == []
 
 
 def test_list_documents(fake_pipeline):
-    response = client.get("/documents")
+    response = client.get("/documents", headers=AUTH)
     assert response.status_code == 200
     assert response.json() == {"documents": ["existing.pdf"]}
 
 
 def test_delete_document(fake_pipeline):
-    response = client.delete("/documents/existing.pdf")
+    response = client.delete("/documents/existing.pdf", headers=AUTH)
     assert response.status_code == 204
     assert fake_pipeline.deleted == ["existing.pdf"]

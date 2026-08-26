@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RAG Microservice</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="https://unpkg.com/htmx.org@2.0.4" crossorigin="anonymous"></script>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>RAG Microservice</h1>
+      <p class="subtitle">Upload documents, ask questions, get cited answers.
+        <a href="/docs">API docs (Swagger)</a></p>
+    </div>
+    <label class="key-field">
+      API key
+      <input type="password" id="api-key" placeholder="X-API-Key" autocomplete="off">
+    </label>
+  </header>
+
+  <main>
+    <section>
+      <h2>Documents</h2>
+      <form hx-post="/ui/upload" hx-encoding="multipart/form-data" hx-target="#documents">
+        <input type="file" name="file"
+               accept=".pdf,.docx,.pptx,.xlsx,.md,.html,.csv,.png,.jpg,.jpeg,.tiff,.bmp,.webp"
+               required>
+        <button type="submit">Upload &amp; index</button>
+        <span class="htmx-indicator">Indexing…</span>
+      </form>
+      <div id="documents" hx-get="/ui/documents" hx-trigger="load delay:200ms, refresh"></div>
+    </section>
+
+    <section>
+      <h2>Ask</h2>
+      <form hx-post="/ui/query" hx-target="#answer">
+        <input type="text" name="question" placeholder="What does the document say about…?"
+               autocomplete="off" required>
+        <button type="submit">Ask</button>
+        <span class="htmx-indicator">Thinking…</span>
+      </form>
+      <div id="answer"></div>
+    </section>
+  </main>
+
+  <script>
+    // The key never leaves this browser except as a header to this same
+    // service. Stored locally so a refresh doesn't lose it.
+    const keyInput = document.getElementById('api-key');
+    keyInput.value = localStorage.getItem('rag_api_key') || '';
+    keyInput.addEventListener('change', () => {
+      localStorage.setItem('rag_api_key', keyInput.value);
+      htmx.trigger('#documents', 'refresh');
+    });
+    document.body.addEventListener('htmx:configRequest', (event) => {
+      event.detail.headers['X-API-Key'] = keyInput.value;
+    });
+    document.body.addEventListener('htmx:responseError', (event) => {
+      if (event.detail.xhr.status === 401) {
+        event.detail.target.innerHTML =
+          '<div class="error">Unauthorized — enter the service API key (top right).</div>';
+      }
+    });
+  </script>
+</body>
+</html>

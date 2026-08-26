@@ -1,0 +1,20 @@
+<article class="answer">
+  <p>{{ answer.text }}</p>
+  {% if answer.citations %}
+  <h3>Sources</h3>
+  <ol class="citations">
+    {% for citation in answer.citations %}
+    <li value="{{ citation.marker }}">
+      <details>
+        <summary>
+          {{ citation.chunk.source }}{% if citation.chunk.page %}, page {{ citation.chunk.page }}{% endif %}
+          {% if citation.chunk.heading %} — {{ citation.chunk.heading }}{% endif %}
+        </summary>
+        <blockquote>{{ citation.chunk.text }}</blockquote>
+      </details>
+    </li>
+    {% endfor %}
+  </ol>
+  {% endif %}
+  <p class="meta">answered by {{ answer.model }}</p>
+</article>

@@ -2,28 +2,21 @@
 
 Run locally:  uv run uvicorn app.main:app --reload
 Swagger UI:   http://localhost:8000/docs
+Dashboard:    http://localhost:8000/
 """
 
-from functools import lru_cache
 from pathlib import Path
 
 import anthropic
-from fastapi import Depends, FastAPI, HTTPException, Request, UploadFile
+from fastapi import Depends, FastAPI, Request, UploadFile
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from app.deps import get_pipeline, require_api_key, save_and_ingest
+from app.ui import router as ui_router
 from rag_core.config import get_settings
 from rag_core.llm import LLMNotConfiguredError
-from rag_core.parsing import SUPPORTED_EXTENSIONS
-
-
-@lru_cache
-def get_pipeline():
-    # Built lazily on first use: loads the parsing + embedding models.
-    # Tests replace this via app.dependency_overrides — no models needed.
-    from rag_core.pipeline import build_pipeline
-
-    return build_pipeline(get_settings())
 
 app = FastAPI(
     title="RAG Microservice",
@@ -32,7 +25,8 @@ app = FastAPI(
         "Ingest documents in any format (PDF, Word, PowerPoint, images with OCR) "
         "and ask questions answered with citations back to the source.\n\n"
         "Pipeline: Docling parsing → structure-aware chunking → hybrid search "
-        "(dense + BM25) in Qdrant → cross-encoder reranking → Claude with citations."
+        "(dense + BM25) in Qdrant → cross-encoder reranking → Claude with citations.\n\n"
+        "Authenticate with the `X-API-Key` header (Authorize button above)."
     ),
     openapi_tags=[
         {"name": "ops", "description": "Health and operational endpoints"},
@@ -40,6 +34,9 @@ app = FastAPI(
         {"name": "query", "description": "Ask questions, get cited answers"},
     ],
 )
+
+app.mount("/static", StaticFiles(directory=Path(__file__).parent / "static"), name="static")
+app.include_router(ui_router)
 
 
 @app.middleware("http")
@@ -62,27 +59,23 @@ def health() -> dict:
     }
 
 
-@app.post("/documents", tags=["documents"], status_code=201)
+# --------------------------------------------------------------------------
+# Documents
+# --------------------------------------------------------------------------
+
+
+@app.post(
+    "/documents",
+    tags=["documents"],
+    status_code=201,
+    dependencies=[Depends(require_api_key)],
+)
 def upload_document(file: UploadFile, pipeline=Depends(get_pipeline)) -> dict:
     """Upload a document (PDF, Word, PowerPoint, image, ...) and index it.
 
     Re-uploading a file with the same name replaces its previous version.
     """
-    filename = Path(file.filename or "").name  # strip any client-sent path
-    extension = Path(filename).suffix.lower()
-    if extension not in SUPPORTED_EXTENSIONS:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Unsupported file type '{extension}'. "
-            f"Supported: {', '.join(sorted(SUPPORTED_EXTENSIONS))}",
-        )
-
-    uploads_dir = Path(get_settings().uploads_dir)
-    uploads_dir.mkdir(parents=True, exist_ok=True)
-    destination = uploads_dir / filename
-    destination.write_bytes(file.file.read())
-
-    result = pipeline.ingest(destination)
+    result = save_and_ingest(file, pipeline)
     return {
         "source": result.source,
         "chunks_indexed": result.num_chunks,
@@ -90,13 +83,18 @@ def upload_document(file: UploadFile, pipeline=Depends(get_pipeline)) -> dict:
     }
 
 
-@app.get("/documents", tags=["documents"])
+@app.get("/documents", tags=["documents"], dependencies=[Depends(require_api_key)])
 def list_documents(pipeline=Depends(get_pipeline)) -> dict:
     """List the indexed documents."""
     return {"documents": pipeline.list_sources()}
 
 
-@app.delete("/documents/{source}", tags=["documents"], status_code=204)
+@app.delete(
+    "/documents/{source}",
+    tags=["documents"],
+    status_code=204,
+    dependencies=[Depends(require_api_key)],
+)
 def delete_document(source: str, pipeline=Depends(get_pipeline)) -> None:
     """Remove a document and all its chunks from the index."""
     pipeline.delete_source(source)
@@ -110,9 +108,7 @@ def delete_document(source: str, pipeline=Depends(get_pipeline)) -> None:
 
 
 class QueryRequest(BaseModel):
-    question: str = Field(
-        min_length=3, max_length=2000, examples=["What is the refund policy?"]
-    )
+    question: str = Field(min_length=3, max_length=2000, examples=["What is the refund policy?"])
 
 
 class CitationOut(BaseModel):
@@ -129,7 +125,12 @@ class QueryResponse(BaseModel):
     citations: list[CitationOut]
 
 
-@app.post("/query", tags=["query"], response_model=QueryResponse)
+@app.post(
+    "/query",
+    tags=["query"],
+    response_model=QueryResponse,
+    dependencies=[Depends(require_api_key)],
+)
 def query(body: QueryRequest, pipeline=Depends(get_pipeline)) -> QueryResponse:
     """Ask a question; the answer cites the source passages it used."""
     answer = pipeline.query(body.question)
@@ -181,6 +182,4 @@ async def handle_api_status(request: Request, exc: anthropic.APIStatusError):
 
 @app.exception_handler(anthropic.APIConnectionError)
 async def handle_api_connection(request: Request, exc: anthropic.APIConnectionError):
-    return JSONResponse(
-        status_code=502, content={"detail": "Could not reach the Anthropic API."}
-    )
+    return JSONResponse(status_code=502, content={"detail": "Could not reach the Anthropic API."})

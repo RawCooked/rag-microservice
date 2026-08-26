@@ -1,0 +1,20 @@
+{% if just_indexed %}
+<p class="notice">
+  Indexed <strong>{{ just_indexed.source }}</strong> —
+  {{ just_indexed.num_chunks }} chunks{% if just_indexed.num_pages %},
+  {{ just_indexed.num_pages }} pages{% endif %}.
+</p>
+{% endif %}
+{% if documents %}
+<ul class="documents">
+  {% for source in documents %}
+  <li>
+    <span>{{ source }}</span>
+    <button class="danger" hx-delete="/ui/documents/{{ source }}" hx-target="#documents"
+            hx-confirm="Remove {{ source }} from the index?">remove</button>
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+<p class="empty">No documents indexed yet — upload one above.</p>
+{% endif %}

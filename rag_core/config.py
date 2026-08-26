@@ -32,6 +32,7 @@ class Settings(BaseSettings):
     # Local models (fastembed)
     dense_model: str = "BAAI/bge-small-en-v1.5"
     sparse_model: str = "Qdrant/bm25"
+    reranker_model: str = "Xenova/ms-marco-MiniLM-L-6-v2"
 
     # Where uploaded files are kept
     uploads_dir: str = "./data/uploads"

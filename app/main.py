@@ -7,9 +7,13 @@ Swagger UI:   http://localhost:8000/docs
 from functools import lru_cache
 from pathlib import Path
 
+import anthropic
 from fastapi import Depends, FastAPI, HTTPException, Request, UploadFile
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
 
 from rag_core.config import get_settings
+from rag_core.llm import LLMNotConfiguredError
 from rag_core.parsing import SUPPORTED_EXTENSIONS
 
 
@@ -98,3 +102,85 @@ def delete_document(source: str, pipeline=Depends(get_pipeline)) -> None:
     pipeline.delete_source(source)
     stored = Path(get_settings().uploads_dir) / Path(source).name
     stored.unlink(missing_ok=True)
+
+
+# --------------------------------------------------------------------------
+# Query
+# --------------------------------------------------------------------------
+
+
+class QueryRequest(BaseModel):
+    question: str = Field(
+        min_length=3, max_length=2000, examples=["What is the refund policy?"]
+    )
+
+
+class CitationOut(BaseModel):
+    marker: int
+    source: str
+    page: int | None
+    heading: str | None
+    text: str
+
+
+class QueryResponse(BaseModel):
+    answer: str
+    model: str
+    citations: list[CitationOut]
+
+
+@app.post("/query", tags=["query"], response_model=QueryResponse)
+def query(body: QueryRequest, pipeline=Depends(get_pipeline)) -> QueryResponse:
+    """Ask a question; the answer cites the source passages it used."""
+    answer = pipeline.query(body.question)
+    return QueryResponse(
+        answer=answer.text,
+        model=answer.model,
+        citations=[
+            CitationOut(
+                marker=c.marker,
+                source=c.chunk.source,
+                page=c.chunk.page,
+                heading=c.chunk.heading,
+                text=c.chunk.text,
+            )
+            for c in answer.citations
+        ],
+    )
+
+
+# --------------------------------------------------------------------------
+# Error mapping: most-specific first — each upstream failure mode gets an
+# honest HTTP status instead of a generic 500.
+# --------------------------------------------------------------------------
+
+
+@app.exception_handler(LLMNotConfiguredError)
+async def handle_llm_not_configured(request: Request, exc: LLMNotConfiguredError):
+    return JSONResponse(status_code=503, content={"detail": str(exc)})
+
+
+@app.exception_handler(anthropic.AuthenticationError)
+async def handle_bad_key(request: Request, exc: anthropic.AuthenticationError):
+    return JSONResponse(status_code=401, content={"detail": "Anthropic API key is invalid."})
+
+
+@app.exception_handler(anthropic.RateLimitError)
+async def handle_rate_limit(request: Request, exc: anthropic.RateLimitError):
+    return JSONResponse(
+        status_code=429, content={"detail": "Anthropic rate limit hit — retry shortly."}
+    )
+
+
+@app.exception_handler(anthropic.APIStatusError)
+async def handle_api_status(request: Request, exc: anthropic.APIStatusError):
+    return JSONResponse(
+        status_code=502, content={"detail": f"Upstream model error ({exc.status_code})."}
+    )
+
+
+@app.exception_handler(anthropic.APIConnectionError)
+async def handle_api_connection(request: Request, exc: anthropic.APIConnectionError):
+    return JSONResponse(
+        status_code=502, content={"detail": "Could not reach the Anthropic API."}
+    )

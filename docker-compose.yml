@@ -1,0 +1,47 @@
+# The whole system on one machine:
+#
+#   docker compose up --build --scale api=2
+#
+# browser/curl → nginx (:8080, rate limit + load balancing)
+#             → api ×N (FastAPI + rag_core)
+#             → qdrant (vector database, server mode)
+#
+# Then repeat  curl -i http://localhost:8080/health  and watch the
+# X-Instance header alternate between the two api containers.
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    environment:
+      RAG_QDRANT_URL: http://qdrant:6333
+      RAG_API_KEY: ${RAG_API_KEY:-dev-key}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      RAG_ANTHROPIC_MODEL: ${RAG_ANTHROPIC_MODEL:-claude-opus-5}
+    volumes:
+      - models:/models          # downloaded ML models survive recreation
+      - uploads:/app/data/uploads
+    depends_on:
+      - qdrant
+    expose:
+      - "8000"                  # reachable by nginx only, not the host
+
+  qdrant:
+    image: qdrant/qdrant:v1.15.1
+    volumes:
+      - qdrant-data:/qdrant/storage
+
+  nginx:
+    image: nginx:1.27-alpine
+    ports:
+      - "8080:80"               # the single public entrance
+    volumes:
+      - ./docker/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - api
+
+volumes:
+  models:
+  qdrant-data:
+  uploads:

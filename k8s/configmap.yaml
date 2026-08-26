@@ -1,0 +1,10 @@
+# Plain (non-secret) configuration, injected into pods as env vars.
+# Same 12-factor variables as .env and docker-compose — only the
+# delivery mechanism changes.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rag-config
+data:
+  RAG_QDRANT_URL: "http://qdrant:6333"
+  RAG_ANTHROPIC_MODEL: "claude-opus-5"

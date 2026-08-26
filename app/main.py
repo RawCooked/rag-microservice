@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 
 from app.deps import get_pipeline, require_api_key, save_and_ingest
 from app.ui import router as ui_router
-from rag_core.config import get_settings
+from rag_core.config import get_settings, instance_name
 from rag_core.llm import LLMNotConfiguredError
 
 app = FastAPI(
@@ -44,7 +44,7 @@ async def add_instance_header(request: Request, call_next):
     # Identifies which replica served the request — makes nginx/K8s
     # load balancing visible from the client side.
     response = await call_next(request)
-    response.headers["X-Instance"] = get_settings().instance_name
+    response.headers["X-Instance"] = instance_name()
     return response
 
 
@@ -54,7 +54,7 @@ def health() -> dict:
     settings = get_settings()
     return {
         "status": "ok",
-        "instance": settings.instance_name,
+        "instance": instance_name(),
         "vector_store": "embedded" if not settings.qdrant_url else settings.qdrant_url,
     }
 

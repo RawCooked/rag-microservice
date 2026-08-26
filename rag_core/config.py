@@ -18,7 +18,9 @@ class Settings(BaseSettings):
 
     # Service
     api_key: str = "dev-key"
-    instance_name: str = "api-local"
+    # Empty = fall back to the machine/container hostname, which is unique
+    # per replica — exactly what the load-balancing demo needs.
+    instance_name: str = ""
 
     # Anthropic — the SDK reads ANTHROPIC_API_KEY itself; we only pick the model.
     # (validation_alias bypasses the RAG_ prefix for the key, standard name wins)
@@ -46,3 +48,10 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
+
+
+@lru_cache
+def instance_name() -> str:
+    import socket
+
+    return get_settings().instance_name or socket.gethostname()

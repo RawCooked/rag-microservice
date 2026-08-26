@@ -1,0 +1,70 @@
+# The API: a Deployment (keep 2 replicas alive, replace crashed pods,
+# roll out new versions gradually) plus a Service (one stable address
+# that load-balances across the replicas — what nginx did in compose,
+# Kubernetes does natively).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rag-api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: rag-api
+  template:
+    metadata:
+      labels:
+        app: rag-api
+    spec:
+      containers:
+        - name: api
+          # Built locally: docker build -t rag-microservice:latest -f docker/Dockerfile .
+          image: rag-microservice:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: rag-config
+            - secretRef:
+                name: rag-secrets
+          # Liveness: restart the pod if the process hangs.
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 20
+            periodSeconds: 15
+          # Readiness: no traffic until models are loaded and /health answers.
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 30
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "1Gi"
+            limits:
+              memory: "3Gi"
+          volumeMounts:
+            - name: models
+              mountPath: /models
+      volumes:
+        # Local models re-download on pod start; a PersistentVolumeClaim
+        # would cache them across restarts (like the compose volume).
+        - name: models
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rag-api
+spec:
+  selector:
+    app: rag-api
+  ports:
+    - port: 8000
+      targetPort: 8000

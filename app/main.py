@@ -4,9 +4,22 @@ Run locally:  uv run uvicorn app.main:app --reload
 Swagger UI:   http://localhost:8000/docs
 """
 
-from fastapi import FastAPI, Request
+from functools import lru_cache
+from pathlib import Path
+
+from fastapi import Depends, FastAPI, HTTPException, Request, UploadFile
 
 from rag_core.config import get_settings
+from rag_core.parsing import SUPPORTED_EXTENSIONS
+
+
+@lru_cache
+def get_pipeline():
+    # Built lazily on first use: loads the parsing + embedding models.
+    # Tests replace this via app.dependency_overrides — no models needed.
+    from rag_core.pipeline import build_pipeline
+
+    return build_pipeline(get_settings())
 
 app = FastAPI(
     title="RAG Microservice",
@@ -43,3 +56,45 @@ def health() -> dict:
         "instance": settings.instance_name,
         "vector_store": "embedded" if not settings.qdrant_url else settings.qdrant_url,
     }
+
+
+@app.post("/documents", tags=["documents"], status_code=201)
+def upload_document(file: UploadFile, pipeline=Depends(get_pipeline)) -> dict:
+    """Upload a document (PDF, Word, PowerPoint, image, ...) and index it.
+
+    Re-uploading a file with the same name replaces its previous version.
+    """
+    filename = Path(file.filename or "").name  # strip any client-sent path
+    extension = Path(filename).suffix.lower()
+    if extension not in SUPPORTED_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported file type '{extension}'. "
+            f"Supported: {', '.join(sorted(SUPPORTED_EXTENSIONS))}",
+        )
+
+    uploads_dir = Path(get_settings().uploads_dir)
+    uploads_dir.mkdir(parents=True, exist_ok=True)
+    destination = uploads_dir / filename
+    destination.write_bytes(file.file.read())
+
+    result = pipeline.ingest(destination)
+    return {
+        "source": result.source,
+        "chunks_indexed": result.num_chunks,
+        "pages": result.num_pages,
+    }
+
+
+@app.get("/documents", tags=["documents"])
+def list_documents(pipeline=Depends(get_pipeline)) -> dict:
+    """List the indexed documents."""
+    return {"documents": pipeline.list_sources()}
+
+
+@app.delete("/documents/{source}", tags=["documents"], status_code=204)
+def delete_document(source: str, pipeline=Depends(get_pipeline)) -> None:
+    """Remove a document and all its chunks from the index."""
+    pipeline.delete_source(source)
+    stored = Path(get_settings().uploads_dir) / Path(source).name
+    stored.unlink(missing_ok=True)

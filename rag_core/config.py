@@ -29,6 +29,13 @@ class Settings(BaseSettings):
     fetch_k: int = 20  # candidates from hybrid search
     top_k: int = 5  # kept after reranking
 
+    # Local models (fastembed)
+    dense_model: str = "BAAI/bge-small-en-v1.5"
+    sparse_model: str = "Qdrant/bm25"
+
+    # Where uploaded files are kept
+    uploads_dir: str = "./data/uploads"
+
     # Vector store: empty URL = embedded local-file mode
     qdrant_url: str = ""
     qdrant_path: str = "./data/qdrant"

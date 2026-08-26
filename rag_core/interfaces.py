@@ -14,6 +14,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
 
+# Marker the parser inserts between pages of the source document, so the
+# chunker can attribute each chunk to a page (needed for citations).
+PAGE_BREAK = "<!-- page-break -->"
+
+
 # --------------------------------------------------------------------------
 # Data types passed between stages
 # --------------------------------------------------------------------------

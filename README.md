@@ -10,7 +10,8 @@ exact source passage** — behind a clean REST API, a Swagger UI, and a zero-bui
 dashboard. Built without LangChain: every pipeline stage is ~100 lines of
 readable, tested, swappable Python.
 
-<!-- demo.gif goes here: 60 seconds of upload → ask → cited answer -->
+<!-- demo: record with scripts/record_demo.py (see "Recording the demo"), then drag
+     docs/demo.mp4 into this README on GitHub to embed it as a player -->
 
 ## What it does
 
@@ -116,6 +117,19 @@ uv run python evals/run.py   # retrieval eval (local models, free)
 ```
 
 CI runs lint + tests on every push.
+
+## Recording the demo
+
+One command builds a sample PDF, starts the API with a throwaway index, drives the
+dashboard in a headless browser (upload → ask → cited answer, with captions) and
+writes `docs/demo.mp4` (1280×720, H.264):
+
+```
+uv run --with playwright playwright install chromium    # first time only
+uv run --with playwright --with imageio-ffmpeg python scripts/record_demo.py
+```
+
+Needs `ANTHROPIC_API_KEY` (env or `.env`) for the answer step — one Claude call per recording.
 
 ## Concept notes
 

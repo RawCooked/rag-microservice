@@ -11,11 +11,13 @@ these fragments are an implementation detail of the dashboard.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import anthropic
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, UploadFile
 from fastapi.templating import Jinja2Templates
+from markupsafe import Markup, escape
 
 from app.deps import get_pipeline, require_api_key, save_and_ingest
 from rag_core.config import get_settings
@@ -23,6 +25,23 @@ from rag_core.llm import LLMNotConfiguredError
 
 router = APIRouter(include_in_schema=False)
 templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
+
+_MARKER_RE = re.compile(r"\[(\d{1,2})\]")
+
+
+def cite_markup(text: str) -> Markup:
+    """Escape answer text, split paragraphs, and turn [n] markers into
+    badges that link to the matching source card."""
+    paragraphs = [p.strip() for p in str(text).split("\n\n") if p.strip()]
+    html = []
+    for paragraph in paragraphs:
+        escaped = str(escape(paragraph)).replace("\n", "<br>")
+        linked = _MARKER_RE.sub(r'<a class="cite" href="#src-\1">\1</a>', escaped)
+        html.append(f"<p>{linked}</p>")
+    return Markup("".join(html))
+
+
+templates.env.filters["cite_markup"] = cite_markup
 
 
 @router.get("/")

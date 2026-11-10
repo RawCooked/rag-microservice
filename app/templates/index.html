@@ -8,40 +8,85 @@
   <script src="https://unpkg.com/htmx.org@2.0.4" crossorigin="anonymous"></script>
 </head>
 <body>
-  <header>
-    <div>
-      <h1>RAG Microservice</h1>
-      <p class="subtitle">Upload documents, ask questions, get cited answers.
-        <a href="/docs">API docs (Swagger)</a></p>
+  <header class="topbar">
+    <div class="brand">
+      <svg class="logo" viewBox="0 0 32 32" aria-hidden="true">
+        <rect width="32" height="32" rx="8" fill="currentColor"/>
+        <path d="M9 10h9a4 4 0 0 1 0 8h-4l5 5M9 10v13" stroke="#fff" stroke-width="2.6"
+              fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <div>
+        <h1>RAG Microservice</h1>
+        <p class="tagline">Upload documents · ask questions · get cited answers</p>
+      </div>
     </div>
-    <label class="key-field">
-      API key
-      <input type="password" id="api-key" placeholder="X-API-Key" autocomplete="off">
-    </label>
+
+    <div class="topbar-right">
+      <span class="status" id="status" data-state="idle">
+        <span class="dot"></span><span id="status-text">Not connected</span>
+      </span>
+      <div class="key-field">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 7a4 4 0 1 1-3.9 4.9L4 19v2h3v-2h2v-2h2l1.1-1.1A4 4 0 0 1 15 7Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="16" cy="11" r="1.2" fill="currentColor"/></svg>
+        <input type="password" id="api-key" placeholder="Service API key" autocomplete="off"
+               aria-label="Service API key (X-API-Key)">
+        <button type="button" class="ghost" id="toggle-key" aria-label="Show key">show</button>
+      </div>
+      <a class="docs-link" href="/docs">API docs ↗</a>
+    </div>
   </header>
 
-  <main>
-    <section>
-      <h2>Documents</h2>
-      <form hx-post="/ui/upload" hx-encoding="multipart/form-data" hx-target="#documents">
-        <input type="file" name="file"
-               accept=".pdf,.docx,.pptx,.xlsx,.md,.html,.csv,.png,.jpg,.jpeg,.tiff,.bmp,.webp"
-               required>
-        <button type="submit">Upload &amp; index</button>
-        <span class="htmx-indicator">Indexing…</span>
+  <main class="layout">
+    <section class="panel kb">
+      <div class="panel-head">
+        <h2>Knowledge base</h2>
+        <span class="hint">PDF · Word · PowerPoint · Excel · HTML · images</span>
+      </div>
+
+      <form id="upload-form" hx-post="/ui/upload" hx-encoding="multipart/form-data"
+            hx-target="#documents" hx-trigger="submit">
+        <label class="dropzone" id="dropzone">
+          <input type="file" name="file" id="file-input"
+                 accept=".pdf,.docx,.pptx,.xlsx,.md,.html,.csv,.png,.jpg,.jpeg,.tiff,.bmp,.webp"
+                 required>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m0 0-4 4m4-4 4 4M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span class="dz-title" id="dz-title">Drop a file here or <u>browse</u></span>
+          <span class="dz-sub">Parsed with Docling — layout, tables and OCR preserved</span>
+        </label>
+        <button type="submit" class="primary wide" id="upload-btn">
+          <span class="btn-label">Upload &amp; index</span>
+          <span class="spinner htmx-indicator"></span>
+        </button>
       </form>
+
       <div id="documents" hx-get="/ui/documents" hx-trigger="load delay:200ms, refresh"></div>
     </section>
 
-    <section>
-      <h2>Ask</h2>
-      <form hx-post="/ui/query" hx-target="#answer">
-        <input type="text" name="question" placeholder="What does the document say about…?"
+    <section class="panel ask">
+      <div class="panel-head">
+        <h2>Ask your documents</h2>
+        <span class="pipeline">
+          <span>Hybrid search</span><i>→</i><span>Rerank</span><i>→</i><span>Grounded answer</span>
+        </span>
+      </div>
+
+      <form class="ask-form" hx-post="/ui/query" hx-target="#answer" hx-indicator="#thinking">
+        <input type="text" name="question" placeholder="Ask anything about your documents…"
                autocomplete="off" required>
-        <button type="submit">Ask</button>
-        <span class="htmx-indicator">Thinking…</span>
+        <button type="submit" class="primary" aria-label="Ask">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m0 0-6-6m6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
       </form>
-      <div id="answer"></div>
+
+      <div id="thinking" class="thinking htmx-indicator">
+        <span class="step">Searching</span><span class="step">Reranking</span><span class="step">Writing answer</span>
+      </div>
+
+      <div id="answer">
+        <div class="placeholder">
+          <p>Answers cite their sources like <span class="cite">1</span> — open any source to
+            read the exact passage it came from.</p>
+        </div>
+      </div>
     </section>
   </main>
 
@@ -49,18 +94,61 @@
     // The key never leaves this browser except as a header to this same
     // service. Stored locally so a refresh doesn't lose it.
     const keyInput = document.getElementById('api-key');
-    keyInput.value = localStorage.getItem('rag_api_key') || '';
+    const status = document.getElementById('status');
+    const statusText = document.getElementById('status-text');
+    const setStatus = (state, text) => { status.dataset.state = state; statusText.textContent = text; };
+
+    try { keyInput.value = localStorage.getItem('rag_api_key') || ''; } catch (e) {}
     keyInput.addEventListener('change', () => {
-      localStorage.setItem('rag_api_key', keyInput.value);
+      try { localStorage.setItem('rag_api_key', keyInput.value); } catch (e) {}
       htmx.trigger('#documents', 'refresh');
     });
+    document.getElementById('toggle-key').addEventListener('click', (e) => {
+      const hidden = keyInput.type === 'password';
+      keyInput.type = hidden ? 'text' : 'password';
+      e.target.textContent = hidden ? 'hide' : 'show';
+    });
+
     document.body.addEventListener('htmx:configRequest', (event) => {
       event.detail.headers['X-API-Key'] = keyInput.value;
+    });
+    document.body.addEventListener('htmx:afterRequest', (event) => {
+      if (event.detail.target.id !== 'documents') return;
+      const code = event.detail.xhr.status;
+      if (code === 200) setStatus('ok', 'Connected');
+      else if (code === 401) setStatus('bad', keyInput.value ? 'Invalid key' : 'Not connected');
     });
     document.body.addEventListener('htmx:responseError', (event) => {
       if (event.detail.xhr.status === 401) {
         event.detail.target.innerHTML =
-          '<div class="error">Unauthorized — enter the service API key (top right).</div>';
+          '<div class="error">Enter the service API key (top right) — it is the ' +
+          '<code>RAG_API_KEY</code> the operator configured.</div>';
+      }
+    });
+
+    // Drop zone: show the chosen file and accept drag-and-drop.
+    const fileInput = document.getElementById('file-input');
+    const dropzone = document.getElementById('dropzone');
+    const dzTitle = document.getElementById('dz-title');
+    fileInput.addEventListener('change', () => {
+      const file = fileInput.files[0];
+      dropzone.classList.toggle('has-file', !!file);
+      dzTitle.innerHTML = file ? '<b></b>' : 'Drop a file here or <u>browse</u>';
+      if (file) dzTitle.querySelector('b').textContent = file.name;
+    });
+    ['dragenter', 'dragover'].forEach((t) => dropzone.addEventListener(t, (e) => {
+      e.preventDefault(); dropzone.classList.add('drag');
+    }));
+    ['dragleave', 'drop'].forEach((t) => dropzone.addEventListener(t, () => dropzone.classList.remove('drag')));
+    dropzone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      fileInput.files = e.dataTransfer.files;
+      fileInput.dispatchEvent(new Event('change'));
+    });
+    document.body.addEventListener('htmx:afterSwap', (event) => {
+      if (event.detail.target.id === 'documents' && event.detail.requestConfig.verb === 'post') {
+        document.getElementById('upload-form').reset();
+        fileInput.dispatchEvent(new Event('change'));
       }
     });
   </script>

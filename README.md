@@ -10,8 +10,7 @@ exact source passage** — behind a clean REST API, a Swagger UI, and a zero-bui
 dashboard. Built without LangChain: every pipeline stage is ~100 lines of
 readable, tested, swappable Python.
 
-<!-- demo: record with scripts/record_demo.py (see "Recording the demo"), then drag
-     docs/demo.mp4 into this README on GitHub to embed it as a player -->
+**▶ [Watch the 90-second demo](docs/demo.mp4)** — install, API key, upload a PDF, ask, cited answer, REST API.
 
 ## What it does
 
@@ -120,16 +119,17 @@ CI runs lint + tests on every push.
 
 ## Recording the demo
 
-One command builds a sample PDF, starts the API with a throwaway index, drives the
-dashboard in a headless browser (upload → ask → cited answer, with captions) and
-writes `docs/demo.mp4` (1280×720, H.264):
+`docs/demo.mp4` is generated, not screen-captured by hand:
 
 ```
 uv run --with playwright playwright install chromium    # first time only
-uv run --with playwright --with imageio-ffmpeg python scripts/record_demo.py
+uv run --with playwright --with imageio-ffmpeg python scripts/demo/record.py
 ```
 
-Needs `ANTHROPIC_API_KEY` (env or `.env`) for the answer step — one Claude call per recording.
+It starts [scripts/demo/demo_server.py](scripts/demo/demo_server.py), which runs the real
+ingestion and retrieval pipeline but a scripted answer step (no LLM key needed; citations
+still point at the chunks retrieval actually returned). Add `--live` to use real Claude
+answers (`ANTHROPIC_API_KEY` required). The terminal scenes are scripted animations.
 
 ## Concept notes
 

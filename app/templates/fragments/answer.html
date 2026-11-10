@@ -1,14 +1,19 @@
 <article class="answer">
-  <p>{{ answer.text }}</p>
+  <div class="answer-body">{{ answer.text | cite_markup }}</div>
   {% if answer.citations %}
-  <h3>Sources</h3>
-  <ol class="citations">
+  <p class="sources-title">Sources</p>
+  <ol class="sources">
     {% for citation in answer.citations %}
-    <li value="{{ citation.marker }}">
-      <details>
+    <li>
+      <details class="source" id="src-{{ citation.marker }}">
         <summary>
-          {{ citation.chunk.source }}{% if citation.chunk.page %}, page {{ citation.chunk.page }}{% endif %}
-          {% if citation.chunk.heading %} — {{ citation.chunk.heading }}{% endif %}
+          <span class="cite">{{ citation.marker }}</span>
+          <span class="src-file">{{ citation.chunk.source }}</span>
+          <span class="src-meta">
+            {%- if citation.chunk.page %} · page {{ citation.chunk.page }}{% endif %}
+            {%- if citation.chunk.heading %} · {{ citation.chunk.heading }}{% endif %}
+          </span>
+          <svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </summary>
         <blockquote>{{ citation.chunk.text }}</blockquote>
       </details>
@@ -16,5 +21,6 @@
     {% endfor %}
   </ol>
   {% endif %}
-  <p class="meta">answered by {{ answer.model }}</p>
+  <p class="meta"><span class="dot"></span>Grounded in {{ answer.citations | length }}
+    source{{ '' if answer.citations | length == 1 else 's' }} · answered by {{ answer.model }}</p>
 </article>

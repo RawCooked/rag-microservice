@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>RAG Microservice demo stage</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #e8ebf5;
+    --muted: #9aa3b8;
+    --accent: #818cf8;
+    --accent-2: #a78bfa;
+    --ok: #34d399;
+    --warn: #fbbf24;
+    --red: #f87171;
+    --mono: "JetBrains Mono", "DejaVu Sans Mono", ui-monospace, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; }
+  body {
+    font-family: "Inter", system-ui, sans-serif;
+    color: var(--ink);
+    background:
+      radial-gradient(1100px 600px at 15% 0%, rgba(99, 102, 241, .35), transparent 60%),
+      radial-gradient(900px 600px at 100% 100%, rgba(167, 139, 250, .25), transparent 60%),
+      #070a14;
+    -webkit-font-smoothing: antialiased;
+  }
+  body::before {
+    content: ""; position: absolute; inset: 0; pointer-events: none;
+    background-image: linear-gradient(rgba(255,255,255,.035) 1px, transparent 1px),
+                      linear-gradient(90deg, rgba(255,255,255,.035) 1px, transparent 1px);
+    background-size: 48px 48px;
+    mask-image: radial-gradient(ellipse at center, #000 30%, transparent 75%);
+  }
+
+  .scene {
+    position: absolute;
+    opacity: 0;
+    transform: translateY(18px) scale(.985);
+    transition: opacity .6s ease, transform .6s ease;
+    pointer-events: none;
+  }
+  .scene.show { opacity: 1; transform: none; pointer-events: auto; }
+
+  /* ---------- title / outro cards ---------- */
+  .card {
+    inset: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    text-align: center; gap: 22px;
+  }
+  .card .logo { width: 104px; height: 104px; color: var(--accent);
+    filter: drop-shadow(0 18px 40px rgba(129, 140, 248, .45)); }
+  .card h1 { margin: 0; font-size: 88px; letter-spacing: -.035em; font-weight: 800;
+    background: linear-gradient(120deg, #fff 20%, #c7cbff 60%, var(--accent-2));
+    -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .card p { margin: 0; font-size: 32px; color: var(--muted); max-width: 1300px; line-height: 1.4; }
+  .card p b { color: var(--ink); font-weight: 600; }
+  .pills { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; margin-top: 18px; }
+  .pills span { padding: 10px 22px; border-radius: 999px; font-size: 22px; font-weight: 600;
+    background: rgba(129, 140, 248, .12); border: 1px solid rgba(129, 140, 248, .35); color: #c7cbff; }
+  .repo { margin-top: 26px; font-family: var(--mono); font-size: 30px; color: var(--ink);
+    padding: 16px 30px; border-radius: 14px; background: rgba(255,255,255,.06);
+    border: 1px solid rgba(255,255,255,.12); }
+
+  /* ---------- windows ---------- */
+  .window {
+    border-radius: 16px;
+    overflow: hidden;
+    background: #0d1220;
+    border: 1px solid rgba(255, 255, 255, .1);
+    box-shadow: 0 40px 120px rgba(0, 0, 0, .6), 0 0 0 1px rgba(0,0,0,.4);
+  }
+  .chrome {
+    height: 52px; display: flex; align-items: center; gap: 18px; padding: 0 20px;
+    background: #161c2c; border-bottom: 1px solid rgba(255,255,255,.07);
+  }
+  .lights { display: flex; gap: 9px; }
+  .lights i { width: 14px; height: 14px; border-radius: 50%; display: block; }
+  .lights i:nth-child(1) { background: #ff5f57; }
+  .lights i:nth-child(2) { background: #febc2e; }
+  .lights i:nth-child(3) { background: #28c840; }
+  .chrome .title { flex: 1; text-align: center; color: var(--muted); font-size: 17px; margin-right: 60px; }
+  .address {
+    flex: 1; max-width: 760px; margin: 0 auto; height: 34px; border-radius: 9px;
+    display: flex; align-items: center; gap: 10px; padding: 0 16px;
+    background: #0b0f1a; color: var(--muted); font-size: 17px;
+  }
+  .address b { color: var(--ink); font-weight: 500; }
+  .address svg { width: 15px; height: 15px; color: var(--ok); }
+
+  #term { left: 210px; top: 120px; width: 1500px; height: 790px; }
+  .term-body {
+    height: calc(100% - 52px); padding: 30px 36px; overflow: hidden;
+    font-family: var(--mono); font-size: 25px; line-height: 1.6; white-space: pre-wrap;
+  }
+  .term-body .line { min-height: 1.6em; }
+  .term-body .ps { color: var(--ok); font-weight: 600; }
+  .term-body .cmd { color: #fff; }
+  .term-body .dim { color: #6b7590; }
+  .term-body .ok { color: var(--ok); }
+  .term-body .key { color: var(--warn); font-weight: 600; }
+  .term-body .str { color: #a5d6a7; }
+  .term-body .num { color: #f0b47a; }
+  .term-body .prop { color: #93c5fd; }
+  .term-body .err { color: var(--red); font-weight: 600; }
+  .term-body .comment { color: #6b7590; font-style: italic; }
+  .caret { display: inline-block; width: .6em; height: 1.1em; vertical-align: -.18em;
+    background: #c7cbff; animation: blink 1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  #browser { left: 100px; top: 86px; width: 1720px; height: 880px; }
+  #browser iframe { width: 100%; height: calc(100% - 52px); border: 0; display: block; background: #0b0f1a; }
+
+  /* ---------- progress + captions ---------- */
+  #steps {
+    position: absolute; top: 26px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 8px; z-index: 20; opacity: 0; transition: opacity .5s;
+  }
+  #steps.show { opacity: 1; }
+  #steps span {
+    display: flex; align-items: center; gap: 9px;
+    padding: 7px 16px 7px 8px; border-radius: 999px; font-size: 17px; font-weight: 600;
+    color: #6b7590; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.07);
+    transition: all .4s;
+  }
+  #steps span b { width: 24px; height: 24px; display: grid; place-items: center; border-radius: 50%;
+    font-size: 13px; background: rgba(255,255,255,.08); }
+  #steps span.on { color: #fff; background: rgba(129,140,248,.2); border-color: rgba(129,140,248,.55); }
+  #steps span.on b { background: linear-gradient(135deg, var(--accent), var(--accent-2)); }
+  #steps span.done { color: #c7cbff; }
+  #steps span.done b { background: rgba(52,211,153,.25); color: var(--ok); }
+
+  #caption {
+    position: absolute; left: 50%; bottom: 34px; transform: translate(-50%, 10px);
+    z-index: 30; opacity: 0; transition: opacity .35s, transform .35s;
+    display: flex; align-items: center; gap: 16px;
+    padding: 16px 30px; border-radius: 16px; max-width: 1600px;
+    background: rgba(10, 13, 25, .88); backdrop-filter: blur(12px);
+    border: 1px solid rgba(255,255,255,.12);
+    box-shadow: 0 20px 50px rgba(0,0,0,.5);
+    font-size: 28px; font-weight: 600; letter-spacing: -.01em; white-space: nowrap;
+  }
+  #caption.show { opacity: 1; transform: translate(-50%, 0); }
+  #caption small { font-weight: 500; color: var(--muted); font-size: 24px; }
+  #caption code { font-family: var(--mono); font-size: .88em; color: var(--warn); }
+
+  /* ---------- fake cursor ---------- */
+  #cursor {
+    position: absolute; left: 0; top: 0; z-index: 50; width: 34px; height: 34px;
+    pointer-events: none; opacity: 0; transition: opacity .3s;
+    filter: drop-shadow(0 3px 6px rgba(0,0,0,.5));
+  }
+  #cursor.show { opacity: 1; }
+  .ripple {
+    position: absolute; z-index: 49; width: 46px; height: 46px; margin: -23px 0 0 -23px;
+    border-radius: 50%; border: 3px solid var(--accent); pointer-events: none;
+    animation: ripple .55s ease-out forwards;
+  }
+  @keyframes ripple { from { transform: scale(.3); opacity: 1; } to { transform: scale(1.6); opacity: 0; } }
+</style>
+</head>
+<body>
+  <div id="steps">
+    <span data-step="install"><b>1</b>Install</span>
+    <span data-step="key"><b>2</b>API key</span>
+    <span data-step="upload"><b>3</b>Upload</span>
+    <span data-step="ask"><b>4</b>Ask</span>
+    <span data-step="api"><b>5</b>REST API</span>
+  </div>
+
+  <section id="intro" class="scene card">
+    <svg class="logo" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="currentColor"/><path d="M9 10h9a4 4 0 0 1 0 8h-4l5 5M9 10v13" stroke="#fff" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <h1>RAG Microservice</h1>
+    <p>Upload documents in any format. Ask questions.<br><b>Get answers with citations to the exact source passage.</b></p>
+    <div class="pills"><span>FastAPI</span><span>Docling</span><span>Qdrant hybrid search</span><span>Cross-encoder rerank</span><span>Claude</span><span>Docker · K8s</span></div>
+  </section>
+
+  <section id="term" class="scene window">
+    <div class="chrome"><div class="lights"><i></i><i></i><i></i></div><div class="title" id="term-title">~/code — zsh</div></div>
+    <div class="term-body" id="term-body"></div>
+  </section>
+
+  <section id="browser" class="scene window">
+    <div class="chrome">
+      <div class="lights"><i></i><i></i><i></i></div>
+      <div class="address"><svg viewBox="0 0 24 24"><path d="M7 11V8a5 5 0 0 1 10 0v3M5 11h14v10H5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg><b>localhost:8080</b></div>
+    </div>
+    <iframe id="app" title="dashboard"></iframe>
+  </section>
+
+  <section id="outro" class="scene card">
+    <svg class="logo" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="currentColor"/><path d="M9 10h9a4 4 0 0 1 0 8h-4l5 5M9 10v13" stroke="#fff" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <h1>Built without LangChain</h1>
+    <p>Every stage ~100 readable lines behind an interface · 39 tests · retrieval evals · CI<br>
+       <b>Docker + nginx load balancing · Kubernetes manifests · MIT licensed</b></p>
+    <div class="repo">github.com/RawCooked/rag-microservice</div>
+  </section>
+
+  <div id="caption"></div>
+  <svg id="cursor" viewBox="0 0 24 24"><path d="M4 2.5v17.2l4.6-4.4 3 6.7 3.1-1.4-3-6.6h6.4z" fill="#fff" stroke="#111" stroke-width="1.3" stroke-linejoin="round"/></svg>
+
+<script>
+  const $ = (s) => document.querySelector(s);
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  window.stage = {
+    show(id) {
+      document.querySelectorAll('.scene').forEach((s) => s.classList.toggle('show', s.id === id));
+    },
+    steps(active) {
+      const el = $('#steps');
+      el.classList.toggle('show', !!active);
+      let passed = true;
+      el.querySelectorAll('span').forEach((s) => {
+        const on = s.dataset.step === active;
+        if (on) passed = false;
+        s.classList.toggle('on', on);
+        s.classList.toggle('done', passed && !on);
+      });
+    },
+    caption(html) {
+      const el = $('#caption');
+      if (!html) { el.classList.remove('show'); return; }
+      el.classList.remove('show');
+      setTimeout(() => { el.innerHTML = html; el.classList.add('show'); }, 180);
+    },
+
+    // ----- terminal -----
+    termTitle(t) { $('#term-title').textContent = t; },
+    termClear() { $('#term-body').innerHTML = ''; },
+    _line(html) {
+      const body = $('#term-body');
+      const line = document.createElement('div');
+      line.className = 'line';
+      line.innerHTML = html;
+      body.appendChild(line);
+      while (body.scrollHeight > body.clientHeight && body.children.length > 1) body.firstChild.remove();
+      return line;
+    },
+    async type(cmd, speed = 38) {
+      document.querySelectorAll('.caret').forEach((c) => c.remove());
+      const line = this._line('<span class="ps">❯ </span><span class="cmd"></span><span class="caret"></span>');
+      const out = line.querySelector('.cmd');
+      for (const ch of cmd) {
+        out.textContent += ch;
+        await sleep(speed + (ch === ' ' ? 25 : Math.random() * 18));
+      }
+      await sleep(260);
+      line.querySelector('.caret').remove();
+    },
+    async out(lines, gap = 90) {
+      for (const html of lines) { this._line(html); await sleep(gap); }
+    },
+    prompt() { this._line('<span class="ps">❯ </span><span class="caret"></span>'); },
+
+    // ----- cursor -----
+    async cursorTo(x, y, ms = 700) {
+      const c = $('#cursor');
+      c.classList.add('show');
+      c.style.transition = `opacity .3s, transform ${ms}ms cubic-bezier(.45,.05,.25,1)`;
+      c.style.transform = `translate(${x - 6}px, ${y - 3}px)`;
+      await sleep(ms + 40);
+    },
+    click(x, y) {
+      const r = document.createElement('div');
+      r.className = 'ripple';
+      r.style.left = x + 'px'; r.style.top = y + 'px';
+      document.body.appendChild(r);
+      setTimeout(() => r.remove(), 600);
+    },
+    cursorHide() { $('#cursor').classList.remove('show'); },
+  };
+</script>
+</body>
+</html>

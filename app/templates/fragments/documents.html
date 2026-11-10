@@ -1,20 +1,23 @@
 {% if just_indexed %}
 <p class="notice">
-  Indexed <strong>{{ just_indexed.source }}</strong> —
+  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4.5 4.5L19 7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  <span>Indexed <strong>{{ just_indexed.source }}</strong> —
   {{ just_indexed.num_chunks }} chunks{% if just_indexed.num_pages %},
-  {{ just_indexed.num_pages }} pages{% endif %}.
+  {{ just_indexed.num_pages }} pages{% endif %}</span>
 </p>
 {% endif %}
 {% if documents %}
+<p class="doc-count">{{ documents | length }} document{{ '' if documents | length == 1 else 's' }} indexed</p>
 <ul class="documents">
   {% for source in documents %}
   <li>
-    <span>{{ source }}</span>
+    <span class="file-badge">{{ (source.rsplit('.', 1)[-1] if '.' in source else 'doc') | upper | truncate(4, True, '') }}</span>
+    <span class="file-name" title="{{ source }}">{{ source }}</span>
     <button class="danger" hx-delete="/ui/documents/{{ source }}" hx-target="#documents"
             hx-confirm="Remove {{ source }} from the index?">remove</button>
   </li>
   {% endfor %}
 </ul>
 {% else %}
-<p class="empty">No documents indexed yet — upload one above.</p>
+<p class="empty">No documents yet — upload one to get started.</p>
 {% endif %}
